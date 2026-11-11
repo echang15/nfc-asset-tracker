@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Asset utilization{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Asset utilization</h1><div class="actions">{{ m.csv_link('reports.utilization') }}</div></div>
+<form class="filters" method="get">
+  {{ m.date_filters(start, end) }}
+  <label>Category <select name="category"><option value="">All</option>{% for c in categories %}<option value="{{ c.id }}" {{ 'selected' if category_id == c.id }}>{{ c.name }}</option>{% endfor %}</select></label>
+  <label>Sort by <select name="sort">{% for v, l in [('pct','Utilization'),('checkouts','Checkouts'),('users','Distinct users'),('tag','Asset tag')] %}<option value="{{ v }}" {{ 'selected' if sort == v }}>{{ l }}</option>{% endfor %}</select></label>
+  <button class="btn" type="submit">Apply</button>
+</form>
+<p class="muted small">Utilization = share of the period the asset was checked out. Retired assets are excluded.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Asset</th><th>Category</th><th class="num">Checkouts</th><th class="num">Distinct users</th><th class="num">Time out</th><th style="width:30%">Utilization</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td><a href="{{ url_for('main.asset_detail', asset_id=r.asset.id) }}">{{ r.asset.asset_tag }}</a> {{ r.asset.name }}</td>
+    <td>{{ r.asset.category.name if r.asset.category else '' }}</td>
+    <td class="num">{{ r.checkouts }}</td>
+    <td class="num">{{ r.users }}</td>
+    <td class="num">{{ r.seconds|duration if r.seconds else '—' }}</td>
+    <td><div style="display:flex;align-items:center;gap:.5rem">
+      <div style="flex:1;background:#eef1f5;border-radius:4px;height:10px"><div style="width:{{ [r.pct, 100]|min }}%;background:var(--primary);height:10px;border-radius:4px"></div></div>
+      <span class="small" style="min-width:3.5em;text-align:right">{{ r.pct }}%</span></div></td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="empty">No assets.</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

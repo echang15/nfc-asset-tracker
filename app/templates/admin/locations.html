@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Locations{% endblock %}
+{% block content %}
+<h1>Locations</h1>
+{% include "admin/_settings_nav.html" %}
+<div class="card">
+  <div class="table-wrap"><table>
+    <thead><tr><th>Name</th><th class="num">Assets</th><th></th></tr></thead>
+    <tbody>
+    {% for l in items %}
+    <tr>
+      <td><form method="post" class="input-group">{{ m.csrf() }}
+          <input type="hidden" name="id" value="{{ l.id }}"><input type="hidden" name="action" value="update">
+          <input type="text" name="name" value="{{ l.name }}" required><button class="btn small" type="submit">Save</button></form></td>
+      <td class="num">{{ l.assets|length }}</td>
+      <td>{% if not l.assets %}<form method="post" onsubmit="return confirm('Delete location?')">{{ m.csrf() }}<input type="hidden" name="id" value="{{ l.id }}"><button class="btn small danger" name="action" value="delete">Delete</button></form>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <h3>Add location</h3>
+  <form method="post" class="input-group" style="max-width:480px">{{ m.csrf() }}
+    <input type="hidden" name="action" value="create">
+    <input type="text" name="name" placeholder="e.g. IT Storeroom" required>
+    <button class="btn primary" type="submit">Add</button>
+  </form>
+</div>
+{% endblock %}

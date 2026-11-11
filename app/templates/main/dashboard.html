@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Dashboard</h1>
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('scan.scan_page') }}">Open scan station</a>
+    <a class="btn" href="{{ url_for('admin.asset_new') }}">+ New asset</a>
+    <a class="btn" href="{{ url_for('admin.user_new') }}">+ New user</a>
+  </div>
+</div>
+<div class="stats">
+  <a class="stat" href="{{ url_for('admin.assets') }}"><div class="value">{{ total }}</div><div class="label">Total assets</div></a>
+  <a class="stat success" href="{{ url_for('admin.assets', status='available') }}"><div class="value">{{ counts.available }}</div><div class="label">Available</div></a>
+  <a class="stat" href="{{ url_for('reports.checked_out') }}"><div class="value">{{ counts.checked_out }}</div><div class="label">Checked out</div></a>
+  <a class="stat danger" href="{{ url_for('reports.overdue') }}"><div class="value">{{ overdue|length }}</div><div class="label">Overdue</div></a>
+  <a class="stat warning" href="{{ url_for('admin.assets', status='maintenance') }}"><div class="value">{{ counts.maintenance }}</div><div class="label">In maintenance</div></a>
+  <a class="stat danger" href="{{ url_for('admin.assets', status='lost') }}"><div class="value">{{ counts.lost }}</div><div class="label">Lost</div></a>
+  <div class="stat"><div class="value">{{ today_out }} / {{ today_in }}</div><div class="label">Out / in (last 24h)</div></div>
+  <a class="stat" href="{{ url_for('admin.users') }}"><div class="value">{{ user_count }}</div><div class="label">Active users</div></a>
+</div>
+{% if untagged %}
+<div class="flash-msg warning">{{ untagged }} asset{{ 's' if untagged != 1 }} without an NFC tag. <a href="{{ url_for('admin.assets', status='untagged') }}">Assign tags &rarr;</a></div>
+{% endif %}
+<div class="grid grid-2">
+  <div class="card">
+    <h2>Overdue</h2>
+    {% if overdue %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Asset</th><th>Holder</th><th>Due</th></tr></thead>
+      <tbody>{% for a in overdue %}<tr>
+        <td><a href="{{ url_for('main.asset_detail', asset_id=a.id) }}">{{ a.asset_tag }}</a> {{ a.name }}</td>
+        <td>{{ a.holder.full_name }}</td><td class="small">{{ a.due_at|dt }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}<p class="empty">Nothing overdue 🎉</p>{% endif %}
+    <h2>Due in the next 48 hours</h2>
+    {% if due_soon %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Asset</th><th>Holder</th><th>Due</th></tr></thead>
+      <tbody>{% for a in due_soon %}<tr>
+        <td><a href="{{ url_for('main.asset_detail', asset_id=a.id) }}">{{ a.asset_tag }}</a> {{ a.name }}</td>
+        <td>{{ a.holder.full_name }}</td><td class="small">{{ a.due_at|dt }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}<p class="empty">Nothing due soon.</p>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Recent activity</h2>
+    {{ m.tx_table(recent, compact=True) }}
+    <a href="{{ url_for('reports.history') }}">Full history &rarr;</a>
+  </div>
+</div>
+{% endblock %}

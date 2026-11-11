@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}My items{% endblock %}
+{% block content %}
+<h1>My items</h1>
+<div class="card">
+  <h2>Currently checked out to you</h2>
+  {% if items %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Asset</th><th>Category</th><th>Checked out</th><th>Due</th></tr></thead>
+    <tbody>{% for a in items %}<tr class="{{ 'overdue' if a.is_overdue }}">
+      <td><a href="{{ url_for('main.asset_detail', asset_id=a.id) }}">{{ a.asset_tag }}</a> {{ a.name }}</td>
+      <td>{{ a.category.name if a.category else '' }}</td>
+      <td class="small">{{ a.checked_out_at|dt }}</td>
+      <td class="small">{{ a.due_at|dt if a.due_at else '—' }} {% if a.is_overdue %}<span class="badge overdue">Overdue</span>{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="empty">You have nothing checked out.</p>{% endif %}
+</div>
+<div class="card">
+  <h2>Your history</h2>
+  {{ m.tx_table(history, show_user=False) }}
+</div>
+{% endblock %}

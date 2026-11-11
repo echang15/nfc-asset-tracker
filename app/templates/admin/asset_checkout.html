@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Check out {{ asset.asset_tag }}{% endblock %}
+{% block content %}
+<h1>Check out {{ asset.name }} <span class="muted">· {{ asset.asset_tag }}</span></h1>
+<div class="card" style="max-width:560px">
+  <p class="muted small">Manual check-out on behalf of a user (e.g. when they don't have their badge). Normal check-outs happen at the scan station.</p>
+  <form method="post" class="stacked">
+    {{ m.csrf() }}
+    <label>User *</label>
+    <select name="user_id" required><option value="">Choose…</option>{% for u in users %}<option value="{{ u.id }}">{{ u.full_name }} ({{ u.username }})</option>{% endfor %}</select>
+    <label>Due date <span class="help">(leave empty for no due date)</span></label>
+    <input type="date" name="due_date" value="{{ default_due|date_input }}">
+    <label>Notes</label><input type="text" name="notes">
+    <p><button class="btn primary" type="submit">Check out</button> <a class="btn" href="{{ url_for('main.asset_detail', asset_id=asset.id) }}">Cancel</a></p>
+  </form>
+</div>
+{% endblock %}

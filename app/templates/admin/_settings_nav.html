@@ -1,0 +1,5 @@
+<div class="actions" style="margin-bottom:1rem">
+  {% for ep, label in [('admin.settings','General'),('admin.categories','Categories'),('admin.locations','Locations'),('admin.audit_log','Audit log')] %}
+  <a class="btn {{ 'primary' if request.endpoint == ep }}" href="{{ url_for(ep) }}">{{ label }}</a>
+  {% endfor %}
+</div>

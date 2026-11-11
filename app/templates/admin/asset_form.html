@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ 'Edit asset' if asset.id else 'New asset' }}{% endblock %}
+{% block content %}
+{% set f = request.form %}
+<h1>{{ 'Edit ' ~ asset.asset_tag if asset.id else 'New asset' }}</h1>
+<div class="card">
+  <form method="post" class="stacked" autocomplete="off">
+    {{ m.csrf() }}
+    <label>NFC tag UID <span class="help">Click "Scan tag" and hold the asset's tag on the reader (or type the UID).</span></label>
+    <div class="input-group">
+      <input type="text" name="nfc_uid" id="nfc_uid" class="mono" data-nfc-field value="{{ f.nfc_uid or asset.nfc_uid or '' }}" placeholder="e.g. 04A23B9C1D2E80" {% if not asset.id %}autofocus{% endif %}>
+      <button class="btn" data-scan-into="#nfc_uid">Scan tag</button>
+    </div>
+    <div class="form-grid">
+      <div><label>Asset tag *</label><input type="text" name="asset_tag" value="{{ f.asset_tag or asset.asset_tag or '' }}" required></div>
+      <div><label>Name *</label><input type="text" name="name" value="{{ f.name or asset.name or '' }}" required placeholder="e.g. Dell Latitude 7440 #3"></div>
+      <div><label>Category</label>
+        <select name="category_id"><option value="">—</option>{% for c in categories %}<option value="{{ c.id }}" {{ 'selected' if (f.category_id|int if f.category_id else asset.category_id) == c.id }}>{{ c.name }}</option>{% endfor %}</select></div>
+      <div><label>Home location</label>
+        <select name="location_id"><option value="">—</option>{% for l in locations %}<option value="{{ l.id }}" {{ 'selected' if (f.location_id|int if f.location_id else asset.location_id) == l.id }}>{{ l.name }}</option>{% endfor %}</select></div>
+      <div><label>Status</label>
+        <select name="status">{% for s in statuses %}{% if s != 'checked_out' or asset.status == 'checked_out' %}<option value="{{ s }}" {{ 'selected' if (f.status or asset.status) == s }}>{{ s|humanize }}</option>{% endif %}{% endfor %}</select></div>
+      <div><label>Condition</label>
+        <select name="condition">{% for c in conditions %}<option value="{{ c }}" {{ 'selected' if (f.condition or asset.condition) == c }}>{{ c|humanize }}</option>{% endfor %}</select></div>
+      <div><label>Manufacturer</label><input type="text" name="manufacturer" value="{{ f.manufacturer or asset.manufacturer or '' }}"></div>
+      <div><label>Model</label><input type="text" name="model" value="{{ f.model or asset.model or '' }}"></div>
+      <div><label>Serial number</label><input type="text" name="serial_number" value="{{ f.serial_number or asset.serial_number or '' }}"></div>
+      <div><label>Purchase date</label><input type="date" name="purchase_date" value="{{ f.purchase_date or (asset.purchase_date|date_input) }}"></div>
+      <div><label>Purchase cost</label><input type="text" name="purchase_cost" inputmode="decimal" value="{{ f.purchase_cost or (asset.purchase_cost if asset.purchase_cost is not none else '') }}"></div>
+      <div><label>Warranty expires</label><input type="date" name="warranty_expires" value="{{ f.warranty_expires or (asset.warranty_expires|date_input) }}"></div>
+    </div>
+    <label>Notes</label><textarea name="notes">{{ f.notes or asset.notes or '' }}</textarea>
+    <p>
+      <button class="btn primary" type="submit">Save</button>
+      {% if not asset.id %}<button class="btn" type="submit" name="another" value="1">Save &amp; add another</button>{% endif %}
+      <a class="btn" href="{{ url_for('main.asset_detail', asset_id=asset.id) if asset.id else url_for('admin.assets') }}">Cancel</a>
+    </p>
+  </form>
+</div>
+{% endblock %}

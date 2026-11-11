@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}First-time setup{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <h1>Welcome 👋</h1>
+  <p class="muted">Create the first administrator account. You can add more users and assets afterwards.</p>
+  <div class="card">
+    <form method="post" class="stacked">
+      {{ m.csrf() }}
+      <label>Full name</label><input type="text" name="full_name" required>
+      <label>Username</label><input type="text" name="username" required>
+      <label>Email <span class="help">(optional)</span></label><input type="email" name="email">
+      <label>Password <span class="help">(min. 8 characters)</span></label><input type="password" name="password" required minlength="8">
+      <label>Confirm password</label><input type="password" name="confirm" required minlength="8">
+      <p><button class="btn primary" type="submit" style="width:100%">Create administrator</button></p>
+    </form>
+  </div>
+</div>
+{% endblock %}

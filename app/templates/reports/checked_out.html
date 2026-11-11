@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ title }} <span class="muted">({{ rows|length }})</span></h1><div class="actions">{{ m.csv_link(request.endpoint) }}</div></div>
+<div class="table-wrap"><table>
+  <thead><tr><th>Asset</th><th>Category</th><th>Holder</th><th>Checked out</th><th>Due</th><th class="num">Days overdue</th></tr></thead>
+  <tbody>
+  {% for a in rows %}
+  <tr class="{{ 'overdue' if a.is_overdue }}">
+    <td><a href="{{ url_for('main.asset_detail', asset_id=a.id) }}">{{ a.asset_tag }}</a> {{ a.name }}</td>
+    <td>{{ a.category.name if a.category else '' }}</td>
+    <td><a href="{{ url_for('admin.user_edit', user_id=a.holder.id) }}">{{ a.holder.full_name }}</a><br><span class="muted small">{{ a.holder.email or '' }}</span></td>
+    <td class="small">{{ a.checked_out_at|dt }}</td>
+    <td class="small">{{ a.due_at|dt if a.due_at else '—' }}</td>
+    <td class="num">{{ (now - a.due_at).days if a.is_overdue else '' }}</td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="empty">Nothing to show.</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

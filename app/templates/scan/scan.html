@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Scan{% endblock %}
+{% block content %}
+<div class="scan-layout">
+  <div>
+    <div class="card">
+      <div class="mode-switch" role="radiogroup" aria-label="Scan mode">
+        <label><input type="radio" name="mode" value="auto" checked><span>Auto (toggle)</span></label>
+        <label><input type="radio" name="mode" value="out"><span>Check out only</span></label>
+        <label><input type="radio" name="mode" value="in"><span>Check in only</span></label>
+      </div>
+      <div class="scan-zone ready" id="scan-zone">
+        <div class="icon">📶</div>
+        <h2>Scan an asset tag</h2>
+        <p class="muted">Hold the item's NFC tag against the reader to check it
+          <strong id="mode-text">out or in</strong> as <strong>{{ current_user.full_name }}</strong>.</p>
+        <form id="scan-form" autocomplete="off">
+          <input type="text" id="scan-input" placeholder="Waiting for tag… (or type a UID and press Enter)" autofocus>
+        </form>
+      </div>
+      <div class="scan-result" id="scan-result" role="status" aria-live="assertive"></div>
+      <p class="idle-note">
+        {% if idle_seconds %}For shared stations you will be signed out automatically after {{ idle_seconds }} seconds of inactivity.{% endif %}
+        Someone else can take over by scanning their badge.
+      </p>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h3>Items you have ({{ mine|length }})</h3>
+      <ul class="scan-log" id="mine">
+        {% for a in mine %}
+        <li><strong>{{ a.name }}</strong> <span class="muted small">{{ a.asset_tag }}</span><br>
+          <span class="small">{% if a.due_at %}Due {{ a.due_at|dt }}{% else %}No due date{% endif %}</span>
+          {% if a.is_overdue %}<span class="badge overdue">Overdue</span>{% endif %}</li>
+        {% else %}<li class="muted">Nothing checked out.</li>{% endfor %}
+      </ul>
+    </div>
+    <div class="card">
+      <h3>This session</h3>
+      <ul class="scan-log" id="scan-log"><li class="muted" id="log-empty">No scans yet.</li></ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const input = document.getElementById("scan-input");
+  const result = document.getElementById("scan-result");
+  const log = document.getElementById("scan-log");
+  const modeText = document.getElementById("mode-text");
+  const idleSeconds = {{ idle_seconds|int }};
+  const isAdmin = {{ 'true' if current_user.is_admin else 'false' }};
+  const registerUrl = "{{ url_for('admin.asset_new') }}";
+  let busy = false, lastUid = "", lastTime = 0, idleTimer = null;
+
+  const mode = () => document.querySelector('input[name="mode"]:checked').value;
+  const modeLabels = { auto: "out or in", out: "out", in: "in" };
+  document.querySelectorAll('input[name="mode"]').forEach((r) =>
+    r.addEventListener("change", () => { modeText.textContent = modeLabels[mode()]; input.focus(); }));
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function show(data) {
+    result.className = "scan-result show " + data.result;
+    let html = escapeHtml(data.message);
+    if (data.result === "unknown" && isAdmin) {
+      html += ` <a class="btn small primary" href="${registerUrl}?uid=${encodeURIComponent(data.uid)}">Register this tag</a>`;
+    }
+    result.innerHTML = html;
+    document.getElementById("log-empty")?.remove();
+    const li = document.createElement("li");
+    const time = new Date().toLocaleTimeString();
+    const label = { checked_out: "OUT", checked_in: "IN", badge: "BADGE", unknown: "?", error: "ERR" }[data.result] || "";
+    li.innerHTML = `<span class="time">${time}</span><span class="badge ${data.result === "checked_out" ? "check_out" : data.result === "checked_in" ? "check_in" : "lost"}">${label}</span> ${escapeHtml(data.asset ? data.asset.name + " (" + data.asset.asset_tag + ")" : data.uid)}`;
+    log.prepend(li);
+  }
+
+  async function submit(uid) {
+    uid = (uid || "").trim();
+    if (!uid || busy) return;
+    // Ignore the same tag read twice within 2 seconds (reader bounce).
+    const now = Date.now();
+    if (uid === lastUid && now - lastTime < 2000) return;
+    lastUid = uid; lastTime = now;
+    busy = true;
+    try {
+      const data = await NFC.postJSON("{{ url_for('scan.api_scan') }}", { uid, mode: mode() });
+      if (!data) return;
+      NFC.beep(data.ok);
+      show(data);
+      if (data.reload) { setTimeout(() => window.location.reload(), 900); return; }
+      if (data.result === "checked_out" || data.result === "checked_in") {
+        // Refresh "Items you have" panel without a full reload.
+        refreshMine();
+      }
+    } catch (e) {
+      NFC.beep(false);
+      show({ result: "error", message: "Could not reach the server. Try again.", uid });
+    } finally {
+      busy = false;
+      input.value = "";
+      input.focus();
+      resetIdle();
+    }
+  }
+
+  async function refreshMine() {
+    const r = await fetch(window.location.href, { credentials: "same-origin" });
+    if (!r.ok) return;
+    const doc = new DOMParser().parseFromString(await r.text(), "text/html");
+    const fresh = doc.getElementById("mine");
+    if (fresh) {
+      const cur = document.getElementById("mine");
+      cur.innerHTML = fresh.innerHTML;
+      cur.closest(".card").querySelector("h3").textContent =
+        doc.getElementById("mine").closest(".card").querySelector("h3").textContent;
+    }
+  }
+
+  document.getElementById("scan-form").addEventListener("submit", (e) => { e.preventDefault(); submit(input.value); });
+  NFC.listenForWedge(submit);
+  NFC.startReaderPolling(submit, { cursor: {{ reader_cursor|int }} || -1 });
+
+  // Keep focus on the scan field so HID readers always type into it.
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("a, button, input, select, textarea, label")) input.focus();
+  });
+  setInterval(() => {
+    if (document.activeElement === document.body) input.focus();
+  }, 1500);
+
+  // Kiosk auto sign-out.
+  function resetIdle() {
+    if (!idleSeconds) return;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => document.getElementById("logout-form").submit(), idleSeconds * 1000);
+  }
+  ["keydown", "mousemove", "click", "touchstart"].forEach((ev) => document.addEventListener(ev, resetIdle, { passive: true }));
+  resetIdle();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Warranty expiring{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Warranty expiring <span class="muted">({{ rows|length }})</span></h1><div class="actions">{{ m.csv_link('reports.warranty') }}</div></div>
+<form class="filters" method="get">
+  <label>Expiring within <input type="number" name="days" min="1" value="{{ days }}" style="min-width:90px"></label><span style="align-self:center">days (includes already expired)</span>
+  <button class="btn" type="submit">Apply</button>
+</form>
+<div class="table-wrap"><table>
+  <thead><tr><th>Asset</th><th>Manufacturer</th><th>Serial</th><th>Warranty expires</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for a in rows %}
+  <tr class="{{ 'overdue' if a.warranty_expires < today }}"><td><a href="{{ url_for('main.asset_detail', asset_id=a.id) }}">{{ a.asset_tag }}</a> {{ a.name }}</td>
+    <td>{{ a.manufacturer or '' }}</td><td class="mono small">{{ a.serial_number or '' }}</td>
+    <td>{{ a.warranty_expires }}{% if a.warranty_expires < today %} <span class="badge overdue">Expired</span>{% endif %}</td>
+    <td>{{ m.status_badge(a) }}</td></tr>
+  {% else %}<tr><td colspan="5" class="empty">No warranties expiring in this window.</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

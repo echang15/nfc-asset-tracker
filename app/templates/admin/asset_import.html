@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Import assets{% endblock %}
+{% block content %}
+<h1>Import assets from CSV</h1>
+<div class="card" style="max-width:760px">
+  <p>Upload a CSV file with a header row. <code>asset_tag</code> and <code>name</code> are required; rows whose
+    <code>asset_tag</code> already exists update that asset. Unknown categories and locations are created automatically.</p>
+  <p class="small">Supported columns: {% for c in columns %}<code>{{ c }}</code>{{ ', ' if not loop.last }}{% endfor %}</p>
+  <p class="small muted">Dates use YYYY-MM-DD. Condition is one of new, good, fair, poor, damaged.</p>
+  <pre class="mono small" style="background:#f4f6f9;padding:.75rem;border-radius:6px;overflow:auto">asset_tag,name,nfc_uid,serial_number,category,location,purchase_date,purchase_cost
+A-00100,Dell Latitude 7440 #5,04A1B2C3D4E5F6,SN123456,Laptop,IT Storeroom,2025-03-01,1199.00</pre>
+  <form method="post" enctype="multipart/form-data" class="stacked">
+    {{ m.csrf() }}
+    <label>CSV file</label><input type="file" name="file" accept=".csv,text/csv" required>
+    <p><button class="btn primary" type="submit">Import</button> <a class="btn" href="{{ url_for('admin.assets') }}">Cancel</a></p>
+  </form>
+</div>
+{% endblock %}

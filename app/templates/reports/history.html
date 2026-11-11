@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Transaction history{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Transaction history</h1><div class="actions">{{ m.csv_link('reports.history') }}</div></div>
+<form class="filters" method="get">
+  {{ m.date_filters(start, end) }}
+  <label>User <select name="user"><option value="">All users</option>{% for u in users %}<option value="{{ u.id }}" {{ 'selected' if user_id == u.id }}>{{ u.full_name }}</option>{% endfor %}</select></label>
+  <label>Asset <input type="search" name="asset" value="{{ asset_q }}" placeholder="Tag or name"></label>
+  <label>Action <select name="action"><option value="">Both</option><option value="check_out" {{ 'selected' if action == 'check_out' }}>Check out</option><option value="check_in" {{ 'selected' if action == 'check_in' }}>Check in</option></select></label>
+  <button class="btn" type="submit">Apply</button>
+</form>
+<p class="muted small">{{ pagination.total }} transactions</p>
+{{ m.tx_table(pagination.items) }}
+{{ m.pager(pagination, 'reports.history') }}
+{% endblock %}

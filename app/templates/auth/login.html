@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <h1 style="text-align:center">{{ org_name }}</h1>
+  <div class="card">
+    {% if badge_login %}
+    <form method="post" id="badge-form">
+      {{ m.csrf() }}
+      <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+      <div class="scan-zone ready" style="padding:1.5rem">
+        <div class="icon">📶</div>
+        <h2>Tap your badge</h2>
+        <p class="muted small">Hold your ID badge against the NFC reader.</p>
+        <input type="password" name="badge_uid" id="badge_uid" autocomplete="off" placeholder="Waiting for badge…" autofocus>
+      </div>
+    </form>
+    <div class="divider">— or sign in with a password —</div>
+    {% endif %}
+    <form method="post" class="stacked">
+      {{ m.csrf() }}
+      <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+      <label for="username">Username</label>
+      <input type="text" name="username" id="username" autocomplete="username" {% if not badge_login %}autofocus{% endif %}>
+      <label for="password">Password</label>
+      <input type="password" name="password" id="password" autocomplete="current-password">
+      <p><button class="btn primary" type="submit" style="width:100%">Sign in</button></p>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{% if badge_login %}
+<script>
+  const badge = document.getElementById("badge_uid");
+  // Typing a badge burst anywhere on the page (focus elsewhere) still works.
+  NFC.listenForWedge((uid) => { badge.value = uid; document.getElementById("badge-form").submit(); });
+  // PC/SC readers (reader_bridge.py): poll for a badge read.
+  let cursor = -1;
+  async function pollBadge() {
+    try {
+      const r = await NFC.postJSON("{{ url_for('scan.api_reader_badge_login') }}", { after: cursor });
+      if (r && r.ok) { NFC.beep(true); window.location = "{{ url_for('main.index') }}"; return; }
+      if (r) { if (r.unknown) NFC.beep(false); cursor = r.cursor; }
+    } catch (e) {}
+    setTimeout(pollBadge, 800);
+  }
+  pollBadge();
+</script>
+{% endif %}
+{% endblock %}

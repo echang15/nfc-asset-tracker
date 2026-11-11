@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Inventory summary{% endblock %}
+{% macro matrix(title, data) %}
+<h2>{{ title }}</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>{{ title.split(' ')[-1]|capitalize }}</th>{% for s in statuses %}<th class="num">{{ s|humanize }}</th>{% endfor %}<th class="num">Total</th><th class="num">Value</th></tr></thead>
+  <tbody>
+  {% for name, r in data.items() %}
+  <tr><td>{{ name }}</td>{% for s in statuses %}<td class="num">{{ r[s] or '' }}</td>{% endfor %}<td class="num"><strong>{{ r.total }}</strong></td><td class="num">{{ '{:,.2f}'.format(r.value) }}</td></tr>
+  {% else %}<tr><td colspan="{{ statuses|length + 3 }}" class="empty">No assets.</td></tr>{% endfor %}
+  </tbody>
+  {% if data %}
+  <tfoot><tr><th>Total</th>{% for s in statuses %}<th class="num">{{ data.values()|sum(attribute=s) }}</th>{% endfor %}<th class="num">{{ data.values()|sum(attribute='total') }}</th><th class="num">{{ '{:,.2f}'.format(data.values()|sum(attribute='value')) }}</th></tr></tfoot>
+  {% endif %}
+</table></div>
+{% endmacro %}
+{% block content %}
+<div class="page-head"><h1>Inventory summary</h1><div class="actions">{{ m.csv_link('reports.inventory') }}</div></div>
+{{ matrix('By category', by_category) }}
+{{ matrix('By location', by_location) }}
+{% endblock %}

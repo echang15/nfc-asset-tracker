@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Categories{% endblock %}
+{% block content %}
+<h1>Categories</h1>
+{% include "admin/_settings_nav.html" %}
+<div class="card">
+  <p class="muted small">A category's loan period overrides the global default loan period (Settings → General). Leave empty to use the default; 0 means no due date.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Name</th><th>Loan period (days)</th><th class="num">Assets</th><th></th></tr></thead>
+    <tbody>
+    {% for c in items %}
+    <tr>
+      <td colspan="2">
+        <form method="post" class="input-group">{{ m.csrf() }}
+          <input type="hidden" name="id" value="{{ c.id }}"><input type="hidden" name="action" value="update">
+          <input type="text" name="name" value="{{ c.name }}" required>
+          <input type="number" name="default_loan_days" min="0" value="{{ c.default_loan_days if c.default_loan_days is not none else '' }}" placeholder="default" style="max-width:120px">
+          <button class="btn small" type="submit">Save</button>
+        </form>
+      </td>
+      <td class="num">{{ c.assets|length }}</td>
+      <td>{% if not c.assets %}<form method="post" onsubmit="return confirm('Delete category?')">{{ m.csrf() }}<input type="hidden" name="id" value="{{ c.id }}"><button class="btn small danger" name="action" value="delete">Delete</button></form>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <h3>Add category</h3>
+  <form method="post" class="input-group" style="max-width:560px">{{ m.csrf() }}
+    <input type="hidden" name="action" value="create">
+    <input type="text" name="name" placeholder="e.g. Laptop" required>
+    <input type="number" name="default_loan_days" min="0" placeholder="Loan days" style="max-width:120px">
+    <button class="btn primary" type="submit">Add</button>
+  </form>
+</div>
+{% endblock %}

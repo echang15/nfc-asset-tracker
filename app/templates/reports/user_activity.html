@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}User activity{% endblock %}
+{% block content %}
+<div class="page-head"><h1>User activity</h1><div class="actions">{{ m.csv_link('reports.user_activity') }}</div></div>
+<form class="filters" method="get">
+  {{ m.date_filters(start, end) }}
+  <label class="checkbox" style="flex-direction:row"><input type="checkbox" name="all" value="1" {{ 'checked' if show_all }}> Include inactive users</label>
+  <button class="btn" type="submit">Apply</button>
+</form>
+<div class="table-wrap"><table>
+  <thead><tr><th>User</th><th>Department</th><th class="num">Checkouts</th><th class="num">Returns</th><th class="num">Late returns</th><th class="num">Holding now</th><th class="num">Overdue now</th><th class="num">Time out</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr class="{{ 'overdue' if r.overdue }}">
+    <td><a href="{{ url_for('admin.user_edit', user_id=r.user.id) }}">{{ r.user.full_name }}</a></td>
+    <td>{{ r.user.department or '' }}</td>
+    <td class="num">{{ r.checkouts }}</td><td class="num">{{ r.returns }}</td>
+    <td class="num">{{ r.late or '' }}</td><td class="num">{{ r.holding or '' }}</td>
+    <td class="num">{{ r.overdue or '' }}</td><td class="num">{{ r.seconds|duration if r.seconds else '—' }}</td>
+  </tr>
+  {% else %}<tr><td colspan="8" class="empty">No activity in this period.</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

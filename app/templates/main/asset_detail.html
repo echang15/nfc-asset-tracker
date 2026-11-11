@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ asset.asset_tag }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ asset.name }} <span class="muted">· {{ asset.asset_tag }}</span></h1>
+  {% if current_user.is_admin %}
+  <div class="actions">
+    {% if asset.status == 'available' %}
+    <a class="btn primary" href="{{ url_for('admin.asset_checkout', asset_id=asset.id) }}">Check out…</a>
+    {% elif asset.status == 'checked_out' %}
+    <form method="post" action="{{ url_for('admin.asset_checkin', asset_id=asset.id) }}" class="inline">
+      {{ m.csrf() }}<button class="btn primary" type="submit">Check in</button>
+    </form>
+    {% endif %}
+    <a class="btn" href="{{ url_for('admin.asset_edit', asset_id=asset.id) }}">Edit</a>
+    {% if not asset.transactions %}
+    <form method="post" action="{{ url_for('admin.asset_delete', asset_id=asset.id) }}" class="inline" onsubmit="return confirm('Delete this asset permanently?')">
+      {{ m.csrf() }}<button class="btn danger" type="submit">Delete</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+<div class="grid grid-2">
+  <div class="card">
+    <h2>Details</h2>
+    <dl class="props">
+      <dt>Status</dt><dd>{{ m.status_badge(asset) }}</dd>
+      {% if asset.holder %}
+      <dt>Checked out to</dt><dd>{% if current_user.is_admin %}<a href="{{ url_for('admin.user_edit', user_id=asset.holder.id) }}">{{ asset.holder.full_name }}</a>{% else %}{{ asset.holder.full_name }}{% endif %}</dd>
+      <dt>Since</dt><dd>{{ asset.checked_out_at|dt }}</dd>
+      <dt>Due</dt><dd>{{ asset.due_at|dt if asset.due_at else 'No due date' }}</dd>
+      {% endif %}
+      <dt>Category</dt><dd>{{ asset.category.name if asset.category else '—' }}</dd>
+      <dt>Home location</dt><dd>{{ asset.location.name if asset.location else '—' }}</dd>
+      <dt>Condition</dt><dd>{{ (asset.condition or '')|humanize }}</dd>
+      <dt>Manufacturer</dt><dd>{{ asset.manufacturer or '—' }}</dd>
+      <dt>Model</dt><dd>{{ asset.model or '—' }}</dd>
+      <dt>Serial number</dt><dd class="mono">{{ asset.serial_number or '—' }}</dd>
+      {% if current_user.is_admin %}
+      <dt>NFC tag UID</dt><dd class="mono">{{ asset.nfc_uid or 'Not tagged' }}</dd>
+      <dt>Purchased</dt><dd>{{ asset.purchase_date or '—' }}{% if asset.purchase_cost %} · {{ '%.2f'|format(asset.purchase_cost) }}{% endif %}</dd>
+      <dt>Warranty until</dt><dd>{{ asset.warranty_expires or '—' }}</dd>
+      {% endif %}
+      {% if asset.notes %}<dt>Notes</dt><dd>{{ asset.notes }}</dd>{% endif %}
+    </dl>
+  </div>
+  {% if current_user.is_admin and asset.status == 'checked_out' %}
+  <div class="card">
+    <h2>Loan actions</h2>
+    <form method="post" action="{{ url_for('admin.asset_extend', asset_id=asset.id) }}" class="stacked">
+      {{ m.csrf() }}
+      <label>Change due date</label>
+      <div class="input-group"><input type="date" name="due_date" value="{{ asset.due_at|date_input }}" required><button class="btn" type="submit">Update</button></div>
+    </form>
+    <form method="post" action="{{ url_for('admin.asset_checkin', asset_id=asset.id) }}" class="stacked">
+      {{ m.csrf() }}
+      <label>Check in with condition</label>
+      <div class="input-group">
+        <select name="condition">{% for c in ['new','good','fair','poor','damaged'] %}<option value="{{ c }}" {{ 'selected' if c == asset.condition }}>{{ c|humanize }}</option>{% endfor %}</select>
+        <input type="text" name="notes" placeholder="Notes (optional)">
+        <button class="btn primary" type="submit">Check in</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+</div>
+<div class="card">
+  <h2>History</h2>
+  {% if current_user.is_admin %}{{ m.tx_table(asset.transactions, show_asset=False) }}
+  {% else %}<p class="muted small">History is visible to administrators.</p>{% endif %}
+</div>
+{% endblock %}

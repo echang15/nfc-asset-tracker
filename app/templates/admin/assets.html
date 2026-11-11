@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Assets{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Assets</h1>
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('admin.asset_new') }}">+ New asset</a>
+    <a class="btn" href="{{ url_for('admin.asset_import') }}">Import CSV</a>
+    <a class="btn" href="{{ url_for('admin.categories') }}">Categories</a>
+    <a class="btn" href="{{ url_for('admin.locations') }}">Locations</a>
+  </div>
+</div>
+<form class="filters" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Tag, name, serial, model, UID">
+  <select name="status">
+    <option value="">Any status</option>
+    {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if status == s }}>{{ s|humanize }}</option>{% endfor %}
+    <option value="overdue" {{ 'selected' if status == 'overdue' }}>Overdue</option>
+    <option value="untagged" {{ 'selected' if status == 'untagged' }}>No NFC tag</option>
+  </select>
+  <select name="category"><option value="">Any category</option>{% for c in categories %}<option value="{{ c.id }}" {{ 'selected' if category_id == c.id }}>{{ c.name }}</option>{% endfor %}</select>
+  <select name="location"><option value="">Any location</option>{% for l in locations %}<option value="{{ l.id }}" {{ 'selected' if location_id == l.id }}>{{ l.name }}</option>{% endfor %}</select>
+  <button class="btn" type="submit">Filter</button>
+  {% if q or status or category_id or location_id %}<a class="btn" href="{{ url_for('admin.assets') }}">Clear</a>{% endif %}
+</form>
+<div class="table-wrap"><table>
+  <thead><tr><th>Tag</th><th>Name</th><th>Category</th><th>Location</th><th>Status</th><th>Holder / due</th><th>NFC</th></tr></thead>
+  <tbody>
+  {% for a in pagination.items %}
+  <tr class="{{ 'overdue' if a.is_overdue }}">
+    <td><a href="{{ url_for('main.asset_detail', asset_id=a.id) }}">{{ a.asset_tag }}</a></td>
+    <td>{{ a.name }}<br><span class="muted small">{{ a.serial_number or '' }}</span></td>
+    <td>{{ a.category.name if a.category else '' }}</td>
+    <td>{{ a.location.name if a.location else '' }}</td>
+    <td>{{ m.status_badge(a) }}</td>
+    <td class="small">{% if a.holder %}{{ a.holder.full_name }}<br><span class="muted">{{ a.due_at|dt if a.due_at else 'no due date' }}</span>{% endif %}</td>
+    <td>{% if a.nfc_uid %}✅{% else %}<a class="small" href="{{ url_for('admin.asset_edit', asset_id=a.id) }}">Assign</a>{% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="7" class="empty">No assets found.</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+{{ m.pager(pagination, 'admin.assets') }}
+{% endblock %}

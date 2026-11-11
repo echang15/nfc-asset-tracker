@@ -1,0 +1,51 @@
+{% macro csrf() %}<input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+
+{% macro status_badge(asset) -%}
+<span class="badge {{ asset.status }}">{{ asset.status|humanize }}</span>
+{%- if asset.is_overdue %} <span class="badge overdue">Overdue</span>{% endif %}
+{%- endmacro %}
+
+{% macro pager(pagination, endpoint) -%}
+{% if pagination.pages > 1 %}
+<div class="pagination">
+  {% set args = request.args.to_dict() %}
+  {% if pagination.has_prev %}{% set _ = args.update(page=pagination.prev_num) %}<a class="btn small" href="{{ url_for(endpoint, **args) }}">&larr; Prev</a>{% endif %}
+  <span class="muted small">Page {{ pagination.page }} of {{ pagination.pages }} ({{ pagination.total }} total)</span>
+  {% if pagination.has_next %}{% set _ = args.update(page=pagination.next_num) %}<a class="btn small" href="{{ url_for(endpoint, **args) }}">Next &rarr;</a>{% endif %}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro csv_link(endpoint) -%}
+{% set args = request.args.to_dict() %}{% set _ = args.update(format='csv') %}
+<a class="btn" href="{{ url_for(endpoint, **args) }}">Export CSV</a>
+<button class="btn" type="button" onclick="window.print()">Print</button>
+{%- endmacro %}
+
+{% macro date_filters(start, end) -%}
+<label>From <input type="date" name="start" value="{{ start }}"></label>
+<label>To <input type="date" name="end" value="{{ end }}"></label>
+{%- endmacro %}
+
+{% macro tx_table(transactions, show_user=True, show_asset=True, compact=False) -%}
+{% if transactions %}
+<div class="table-wrap"><table>
+  <thead><tr><th>When</th><th>Action</th>{% if show_asset %}<th>Asset</th>{% endif %}{% if show_user %}<th>User</th>{% endif %}{% if not compact %}<th>By</th><th>Due</th><th>Notes</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for t in transactions %}
+  <tr>
+    <td class="small" style="white-space:nowrap">{{ t.timestamp|dt }}</td>
+    <td><span class="badge {{ t.action }}">{{ t.action|humanize }}</span>{% if t.method == 'manual' %} <span class="muted small">manual</span>{% endif %}</td>
+    {% if show_asset %}<td><a href="{{ url_for('main.asset_detail', asset_id=t.asset.id) }}">{{ t.asset.asset_tag }}</a> <span class="muted small">{{ t.asset.name }}</span></td>{% endif %}
+    {% if show_user %}<td>{{ t.user.full_name }}</td>{% endif %}
+    {% if not compact %}
+    <td class="small">{{ t.performed_by.full_name if t.performed_by and t.performed_by.id != t.user.id else '' }}</td>
+    <td class="small">{{ t.due_at|dt if t.due_at else '' }}</td>
+    <td class="small">{{ t.notes or '' }}</td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<p class="empty">No activity yet.</p>{% endif %}
+{%- endmacro %}

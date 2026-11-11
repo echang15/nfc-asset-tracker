@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+<h1>Reports</h1>
+<div class="stats" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr))">
+  {% for ep, title, desc in reports %}
+  <a class="stat" href="{{ url_for(ep) }}"><div style="font-weight:700;font-size:1.05rem">{{ title }}</div><div class="label">{{ desc }}</div></a>
+  {% endfor %}
+</div>
+<p class="muted small">Every report can be exported to CSV (opens in Excel / Google Sheets) or printed.</p>
+{% endblock %}

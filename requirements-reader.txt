@@ -1,0 +1,3 @@
+# Only needed for reader_bridge.py (PC/SC readers such as ACR122U / ACR1252U)
+pyscard>=2.0
+requests>=2.31

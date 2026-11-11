@@ -1,6 +1,8 @@
 """Core check-in / check-out business logic, shared by the scan UI, the
 manual admin forms and the JSON API."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import timedelta
 
@@ -18,6 +20,12 @@ from .models import (
     utcnow,
 )
 from .utils import format_dt, humanize, normalize_uid
+
+
+def parse_tag_text(text):
+    from .tags import parse_tag_text as _parse
+
+    return _parse(text)
 
 MODE_AUTO = "auto"
 MODE_OUT = "out"
@@ -128,7 +136,7 @@ def check_in(asset, performed_by, condition=None, method="scan", notes=None):
     return tx
 
 
-def process_scan(raw_uid, actor, mode=MODE_AUTO):
+def process_scan(raw_uid, actor, mode=MODE_AUTO, tag_text=None):
     """Handle a tag scanned by ``actor`` and return a ScanResult.
 
     The caller is responsible for committing the session.
@@ -146,14 +154,21 @@ def process_scan(raw_uid, actor, mode=MODE_AUTO):
                 user=badge_user,
             )
         msg = "Unknown tag."
+        extra = {"can_register": bool(actor.is_admin)}
+        parsed = parse_tag_text(tag_text)
+        if parsed:
+            kind, value = parsed
+            msg = f"This tag says \u201c{kind} {value}\u201d but is not linked in the system."
+            if kind == "asset":
+                existing = Asset.query.filter_by(asset_tag=value).first()
+                extra["asset_tag"] = value
+                if existing:
+                    extra["asset_id"] = existing.id
         if actor.is_admin:
             msg += " You can register it as a new asset."
         else:
             msg += " Ask an administrator to register it."
-        return ScanResult(
-            False, "unknown", msg, uid,
-            extra={"can_register": bool(actor.is_admin)},
-        )
+        return ScanResult(False, "unknown", msg, uid, extra=extra)
 
     try:
         if asset.status == STATUS_CHECKED_OUT:

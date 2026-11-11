@@ -27,10 +27,11 @@
       <div><label>{{ 'Reset password' if user.id else 'Password' }} <span class="help">{{ '(leave blank to keep)' if user.id else '(optional for badge-only users)' }}</span></label>
         <input type="password" name="password" autocomplete="new-password" minlength="8"></div>
     </div>
-    <label>Badge NFC UID <span class="help">Click "Scan badge" and tap the user's badge on the reader.</span></label>
+    <label>Badge NFC UID <span class="help">"Scan badge" links an existing badge; "Program new badge" writes this user's ID onto a blank NFC tag/card and links it{% if not user.id %} (available after saving){% endif %}.</span></label>
     <div class="input-group">
       <input type="text" name="badge_uid" id="badge_uid" class="mono" data-nfc-field value="{{ request.form.badge_uid or user.badge_uid or '' }}" placeholder="e.g. 04A23B9C">
       <button class="btn" data-scan-into="#badge_uid">Scan badge</button>
+      {% if user.id %}<button class="btn" type="button" data-program-tag="user" data-id="{{ user.id }}" data-label="{{ user.full_name }}">Program new badge</button>{% endif %}
     </div>
     <label class="checkbox"><input type="checkbox" name="is_active" value="1" {{ 'checked' if (user.is_active_flag if not request.form else request.form.is_active) }}> Account active</label>
     <p><button class="btn primary" type="submit">Save</button> <a class="btn" href="{{ url_for('admin.users') }}">Cancel</a></p>

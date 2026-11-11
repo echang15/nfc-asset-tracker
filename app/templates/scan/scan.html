@@ -54,6 +54,7 @@
   const idleSeconds = {{ idle_seconds|int }};
   const isAdmin = {{ 'true' if current_user.is_admin else 'false' }};
   const registerUrl = "{{ url_for('admin.asset_new') }}";
+  const editUrl = "{{ url_for('admin.asset_edit', asset_id=0) }}";
   let busy = false, lastUid = "", lastTime = 0, idleTimer = null;
 
   const mode = () => document.querySelector('input[name="mode"]:checked').value;
@@ -69,7 +70,12 @@
     result.className = "scan-result show " + data.result;
     let html = escapeHtml(data.message);
     if (data.result === "unknown" && isAdmin) {
-      html += ` <a class="btn small primary" href="${registerUrl}?uid=${encodeURIComponent(data.uid)}">Register this tag</a>`;
+      if (data.asset_id) {
+        html += ` <a class="btn small primary" href="${editUrl.replace("0", data.asset_id)}?uid=${encodeURIComponent(data.uid)}">Link tag to ${escapeHtml(data.asset_tag)}</a>`;
+      } else {
+        const tag = data.asset_tag ? `&asset_tag=${encodeURIComponent(data.asset_tag)}` : "";
+        html += ` <a class="btn small primary" href="${registerUrl}?uid=${encodeURIComponent(data.uid)}${tag}">Register this tag</a>`;
+      }
     }
     result.innerHTML = html;
     document.getElementById("log-empty")?.remove();
@@ -80,7 +86,7 @@
     log.prepend(li);
   }
 
-  async function submit(uid) {
+  async function submit(uid, text) {
     uid = (uid || "").trim();
     if (!uid || busy) return;
     // Ignore the same tag read twice within 2 seconds (reader bounce).
@@ -89,7 +95,7 @@
     lastUid = uid; lastTime = now;
     busy = true;
     try {
-      const data = await NFC.postJSON("{{ url_for('scan.api_scan') }}", { uid, mode: mode() });
+      const data = await NFC.postJSON("{{ url_for('scan.api_scan') }}", { uid, text: text || null, mode: mode() });
       if (!data) return;
       NFC.beep(data.ok);
       show(data);

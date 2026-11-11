@@ -12,6 +12,11 @@
 
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
 
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
   function beep(ok) {
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -46,7 +51,7 @@
         if (r.ok) {
           const data = await r.json();
           cursor = data.cursor;
-          data.uids.forEach(onUid);
+          (data.events || data.uids.map((uid) => ({ uid }))).forEach((e) => onUid(e.uid, e.text));
         } else if (r.status === 401 || r.redirected) {
           stopped = true;
         }
@@ -104,8 +109,10 @@
         let stop = null;
         const done = () => { btn.textContent = label; btn.disabled = false; if (stop) stop(); };
         input.addEventListener("change", done, { once: true });
-        stop = startReaderPolling((uid) => {
+        stop = startReaderPolling((uid, text) => {
           input.value = uid; beep(true); done();
+          const out = btn.dataset.scanText && document.querySelector(btn.dataset.scanText);
+          if (out) out.textContent = text ? `Programmed text: \u201c${text}\u201d` : "No programmed text on this tag.";
         }, { durationMs: 15000 });
         setTimeout(done, 15000);
       });
@@ -123,6 +130,87 @@
     return r.json();
   }
 
-  window.NFC = { beep, startReaderPolling, listenForWedge, postJSON, csrf };
-  document.addEventListener("DOMContentLoaded", initNfcFields);
+  /* ---- Programming tags ------------------------------------------------
+   * programTag(kind, id, onUpdate) creates a write job and resolves with the
+   * final job ({status: done|failed|cancelled, message, uid, text}).
+   * The returned promise has a .cancel() method. */
+  function programTag(kind, id, onUpdate) {
+    let jobId = null, cancelled = false, cancelResolve = null;
+    const promise = new Promise(async (resolve) => {
+      cancelResolve = resolve;
+      const job = await postJSON("/admin/tags/program", { kind, id });
+      if (!job) return resolve({ status: "failed", message: "Not signed in." });
+      jobId = job.id;
+      onUpdate && onUpdate(job);
+      while (!cancelled) {
+        await new Promise((r) => setTimeout(r, 600));
+        let cur;
+        try {
+          const r = await fetch(`/admin/tags/jobs/${jobId}`, { credentials: "same-origin" });
+          cur = await r.json();
+        } catch (e) { continue; }
+        onUpdate && onUpdate(cur);
+        if (["done", "failed", "cancelled"].includes(cur.status)) return resolve(cur);
+      }
+    });
+    promise.cancel = async () => {
+      cancelled = true;
+      if (jobId) await postJSON(`/admin/tags/jobs/${jobId}/cancel`, {});
+      cancelResolve && cancelResolve({ status: "cancelled", message: "Cancelled." });
+    };
+    return promise;
+  }
+
+  /* Modal dialog used by [data-program-tag] buttons. */
+  function openProgramDialog(kind, id, label) {
+    const dlg = document.getElementById("program-dialog");
+    const title = dlg.querySelector("[data-title]");
+    const msg = dlg.querySelector("[data-msg]");
+    const icon = dlg.querySelector("[data-icon]");
+    const closeBtn = dlg.querySelector("[data-close]");
+    const cancelBtn = dlg.querySelector("[data-cancel]");
+    title.textContent = `Program NFC tag for ${label}`;
+    icon.textContent = "\uD83D\uDCF6";
+    msg.innerHTML = "Preparing\u2026";
+    dlg.className = "modal show";
+    closeBtn.hidden = true; cancelBtn.hidden = false;
+    const p = programTag(kind, id, (job) => {
+      if (job.status === "pending") {
+        msg.innerHTML = `<strong>Place a blank NFC tag on the reader now.</strong><br>` +
+          `It will be written with <code>${escapeHtml(job.text)}</code> and linked automatically.` +
+          (job.bridge ? "" : `<div class="flash-msg warning" style="margin-top:.75rem">The reader bridge has not been seen recently. ` +
+           `Start the app with <code>--pcsc</code> (the start scripts do this) and make sure the reader is plugged in.</div>`);
+      } else if (job.status === "writing") {
+        msg.innerHTML = "<strong>Writing\u2026 keep the tag on the reader.</strong>";
+      }
+    });
+    cancelBtn.onclick = () => p.cancel();
+    const finish = () => { dlg.className = "modal"; };
+    p.then((job) => {
+      cancelBtn.hidden = true; closeBtn.hidden = false;
+      if (job.status === "done") {
+        beep(true); icon.textContent = "\u2705"; dlg.classList.add("ok");
+        msg.textContent = job.message + " You can remove the tag.";
+        closeBtn.onclick = () => window.location.reload();
+      } else if (job.status === "cancelled") {
+        finish();
+      } else {
+        beep(false); icon.textContent = "\u26A0\uFE0F"; dlg.classList.add("err");
+        msg.textContent = job.message || "Programming failed.";
+        closeBtn.onclick = finish;
+      }
+    });
+  }
+
+  function initProgramButtons() {
+    document.querySelectorAll("[data-program-tag]").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        openProgramDialog(btn.dataset.programTag, btn.dataset.id, btn.dataset.label || "");
+      });
+    });
+  }
+
+  window.NFC = { beep, startReaderPolling, listenForWedge, postJSON, csrf, programTag, escapeHtml };
+  document.addEventListener("DOMContentLoaded", () => { initNfcFields(); initProgramButtons(); });
 })();

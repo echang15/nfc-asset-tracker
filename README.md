@@ -37,6 +37,9 @@ external database.
   and the reader API key.
 - **Audit log** of admin actions and sign-ins.
 - Unknown tag scanned by an admin → a one-click "Register this tag" link.
+- **Program NFC tags**: write an asset ID (`asset:A-00001`) or user ID
+  (`user:alice`) onto a blank tag and link it in one step. Use it for a single
+  asset or user, or work through all untagged assets in a row.
 
 **Reports** (each one exports to CSV and prints)
 | Report | What it answers |
@@ -52,21 +55,56 @@ external database.
 
 ## Quick start
 
-Requires Python 3.10+.
+### Windows
+
+1. Install **Python 3.12** from <https://www.python.org/downloads/windows/>.
+   In the installer, tick **"Add python.exe to PATH"**.
+2. Download this project (green **Code** button → *Download ZIP*) and unzip it,
+   e.g. to `Documents\nfc-asset-tracker`.
+3. Plug in the NFC reader. Windows installs its standard smart-card driver
+   automatically.
+4. Double-click **`start-windows.bat`**.
+
+### macOS
+
+1. Install **Python 3.12** from <https://www.python.org/downloads/macos/>
+   (the built-in `python3` also works if it is 3.9 or newer).
+2. Download and unzip this project, e.g. into `Documents`.
+3. Plug in the NFC reader. No driver is needed.
+4. Double-click **`start-mac.command`**. If macOS says it is from an
+   unidentified developer, right-click it → **Open** → **Open** (once only). If
+   it opens in a text editor instead, run this in Terminal from the project folder:
+   ```bash
+   chmod +x start-mac.command
+   ```
+
+### What the start script does
+
+The first run needs internet for a minute. The script creates a private Python
+environment in `.venv`, installs the packages (including the smart-card library
+`pyscard`, prebuilt for Windows and macOS), starts the app **with the reader
+bridge** and opens <http://127.0.0.1:5050> in your browser. Keep the window open
+while you use the app. Close it or press Ctrl+C to stop.
+
+On first launch the app asks you to create the administrator account. To start
+automatically at login, put a shortcut to the start script in the Windows
+Startup folder (`Win+R` → `shell:startup`) or add it to macOS **System Settings
+→ General → Login Items**.
+
+### Manual / Linux
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python run.py
+pip install -r requirements.txt -r requirements-reader.txt
+python run.py --pcsc --open
 ```
 
-Open <http://127.0.0.1:5000>. On first run you will be asked to create the
-administrator account.
+Linux needs `sudo apt install pcscd libpcsclite-dev swig` first. Or use
+`./start-linux.sh`.
 
-To try it with sample data instead (creates `admin` / `adminadmin` if there is
-no admin yet, plus users `alice`, `bob`, `carol` and `dave` with password
-`password`):
+To try it with sample data (creates `admin` / `adminadmin` if there is no admin
+yet, plus users `alice`, `bob`, `carol` and `dave` with password `password`):
 
 ```bash
 flask --app run seed-demo
@@ -76,80 +114,102 @@ Other useful commands:
 
 ```bash
 flask --app run create-admin           # add another admin from the terminal
-python run.py --host 0.0.0.0           # make it reachable from other PCs on the LAN
-pip install waitress && python run.py  # use a production WSGI server (used automatically when installed)
+python run.py --pcsc --host 0.0.0.0    # make it reachable from other PCs on the LAN
 ```
 
 The database and the generated secret key are stored in `instance/`. Back up
-`instance/assets.db` to back up everything. Set `DATABASE_URL` to use a
-different database (e.g. PostgreSQL).
+`instance/assets.db` to back up everything. Updates add new database columns
+automatically.
 
 ## Connecting the NFC reader
 
 USB NFC readers come in two kinds. Both are supported.
 
-### 1. Keyboard-emulation (HID) readers: nothing to install
-
-Many inexpensive USB readers "type" the tag's UID followed by Enter, as if they
-were a keyboard. Open the **Scan** page and tap a tag. The page keeps its scan
-field focused, and it also detects reader input when focus is elsewhere.
-
-Tips:
-- Set the reader to output the UID in **hex** if it can, and set it up the same
-  way on every station. A reader set to decimal gives different UIDs for the
-  same tag. Colons, spaces and dashes are removed and letters are upper-cased
-  automatically.
-- Use **Settings → Test a tag** to see exactly what the app receives.
-
-### 2. PC/SC (smart-card) readers
+### Smart-card (PC/SC) readers: recommended, required for programming tags
 
 This includes 2-in-1 **CAC / smart card + NFC** readers (e.g. Arsandyn and
-similar "Contact and Contactless IC/ID/PIV" readers), ACR122U, ACR1252U,
-HID Omnikey and Identiv. They do not type anything. A small bridge passes their
-tag reads to the app. The easiest way is to start it together with the app:
+similar "Contact and Contactless IC/ID/PIV" readers), ACR122U, ACR1252U, HID
+Omnikey and Identiv. They show up as standard smart-card readers on Windows and
+macOS, so no driver is needed. The start scripts run the **reader bridge**,
+which sends each tapped tag to the app.
 
-```bash
-pip install -r requirements-reader.txt     # pyscard + requests
-python run.py --pcsc
-```
+Check it: **Settings → General** shows *Reader bridge connected* with the
+reader's name. Under *Test a tag*, click **Read via bridge** and tap a tag.
 
-To check which reader the bridge will use (marked with `*`):
+**2-in-1 contact + contactless readers** appear as two readers. The bridge
+listens to the NFC antenna and ignores cards pushed into the slot (CAC, bank
+cards). If it picks the wrong one, list the readers with
+`.venv/bin/python reader_bridge.py --list`
+(Windows: `.venv\Scripts\python reader_bridge.py --list`), then pass part of
+the right name: `run.py --pcsc --reader "Contactless"`.
 
-```bash
-python reader_bridge.py --list
-```
+### Keyboard-emulation (HID) readers
 
-You can also run the bridge on its own:
-`python reader_bridge.py --key <reader API key>`. The key is shown under
-**Settings → General**.
+Some inexpensive readers "type" the tag's UID followed by Enter. They work
+without the bridge: open the **Scan** page and tap a tag. Set the reader to
+output the UID in hex, and set every station the same way. These readers
+**cannot program tags**.
 
-**2-in-1 contact + contactless readers** appear as two readers, one for the
-card slot and one for the NFC antenna. The bridge listens to the antenna and
-ignores cards pushed into the slot (CAC, bank cards). If `--list` picks the
-wrong one, choose it yourself with `--reader "<part of the name>"`.
+### Which tags to buy
 
-Per operating system:
-- **Windows / macOS**: no driver needed (the reader is a standard CCID device).
-  `pip install pyscard` installs a prebuilt package.
-- **Linux**: `sudo apt install pcscd pcsc-tools` and check the reader with
-  `pcsc_scan`. If pip has to build pyscard, also install `libpcsclite-dev swig`.
-  For ACR122U-type readers, blacklist the `pn533_usb` kernel module.
+13.56 MHz **NTAG213, NTAG215 or NTAG216** tags (stickers, key fobs or cards).
+These are the only types the app can program; MIFARE Classic and DESFire tags
+can be linked by UID but not written. Use **on-metal / anti-metal** stickers on
+laptops and metal tools, because ordinary stickers don't read on metal. Phones
+(Apple/Google Pay) show a random ID each time, so they can't be used as badges.
+125 kHz proximity badges (older HID Prox / EM4100) can't be read by a 13.56 MHz
+reader.
 
-**Which tags to buy:** 13.56 MHz ISO 14443A tags. NTAG213/215/216 stickers are
-cheap and read reliably. Use **on-metal / anti-metal** NFC stickers on laptops
-and metal tools, because ordinary stickers don't read on metal. Phones (Apple/Google
-Pay) and some bank cards show a random ID on each tap, so they can't be used as
-badges. 125 kHz proximity badges (older HID Prox / EM4100) can't be read by a
-13.56 MHz reader. The CAC chip in the contact slot is not used for sign-in.
+## Programming tags
+
+You need a smart-card reader with the bridge running, and NTAG213/215/216 tags.
+
+- **One asset**: open the asset → **Program NFC tag** → place a blank tag on
+  the reader. The app writes `asset:<asset tag>`, reads it back to verify, and
+  links the tag to the asset. Any old tag for that asset stops working.
+- **One user badge**: Users → open the user → **Program new badge** → place a
+  tag or card on the reader. It is written with `user:<username>` and becomes
+  that person's sign-in badge.
+- **Many assets**: Assets → **Program tags**. Press *Start* and place a new tag
+  for each asset in turn. The page moves to the next asset by itself, and you
+  can *Retry* or *Skip* any asset.
+
+How it works and why it is safe:
+- While a programming request is waiting (up to 90 seconds), the next tap is
+  used for programming instead of a check-in/out.
+- A tag that already belongs to another asset or user is refused **before
+  anything is written**. Remove it from the other item first.
+- The written text is for people and phones: any NFC phone app shows
+  `asset:A-00001`. The app itself still identifies tags by their factory UID,
+  which cannot be changed. So writing `user:admin` onto a random tag does
+  **not** let anyone sign in as admin.
+- If you scan a tag that carries `asset:...` text but isn't linked (for example
+  after restoring an old backup), the scan station offers **Link tag to …**
+  with one click.
+- Tags are left rewritable. To lock one permanently, use a phone app such as
+  NXP *TagWriter*. A locked tag can't be reprogrammed.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| "Reader bridge not detected" | Start the app with the start script (or `run.py --pcsc`); check the reader is plugged in; look at the start window for messages. |
+| Start window says *pyscard is not installed* | Make sure you installed Python from python.org (3.9–3.14), delete the `.venv` folder and run the start script again. |
+| Windows pops up "installing device driver software" when a tag is tapped | Harmless. To silence it: `gpedit.msc` → Computer Configuration → Administrative Templates → Windows Components → Smart Card → *Turn on Smart Card Plug and Play service* → **Disabled**. |
+| "Smart card service" error on Windows | `Win+R` → `services.msc` → **Smart Card** → Start (Automatic). |
+| Tag reads but programming fails | Use NTAG213/215/216 tags and hold the tag still until the beep. Tags locked as read-only can't be reprogrammed. |
+| "Tag is already assigned to …" | That tag is linked to another asset or user. Use a fresh tag, or clear the UID on the other item first. |
+| The app opens on a different port than 5050 | Another program uses port 5050, so the app took the next free one. The start window shows the address. Use it, or close the other program. |
 
 ## Typical workflow
 
 1. Admin creates **categories** (with loan periods) and **locations**.
-2. Admin adds **assets**: click *Scan tag* on the asset form and tap the sticker,
-   or bulk-import a CSV and then scan an unknown tag at the station and choose
-   *Register this tag*.
-3. Admin adds **users** and taps each person's badge on *Scan badge* (optional;
-   users can also sign in with a password).
+2. Admin adds **assets** (one by one or by CSV import), then uses
+   **Assets → Program tags** to write and stick a tag on each one. Tags that
+   are already on items can be linked with *Scan tag* instead.
+3. Admin adds **users** and gives each person a badge with **Program new
+   badge**, or links an existing badge with *Scan badge*. This is optional;
+   users can also sign in with a password.
 4. Leave the laptop on the **Scan** page. People tap their badge, then tap
    items to take or return them.
 5. Use the **Dashboard** and **Reports** to chase overdue items and review usage.
@@ -166,9 +226,12 @@ app/
   main.py         dashboard, my items, asset detail
   admin.py        user / asset / category / location / settings / audit admin
   reports.py      reports and CSV export
+  tags.py         tag programming jobs and reader-bridge status
   templates/, static/
-reader_bridge.py  PC/SC reader → app bridge
+nfc_tags.py       NTAG / Ultralight read & write (NDEF) over PC/SC
+reader_bridge.py  PC/SC reader -> app bridge (reads, programs tags)
 run.py            entry point
+start-windows.bat, start-mac.command, start-linux.sh   one-click launchers
 tests/            pytest suite
 ```
 

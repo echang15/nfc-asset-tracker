@@ -1,3 +1,4 @@
-# Only needed for reader_bridge.py (PC/SC readers such as ACR122U / ACR1252U)
+# Needed for smart-card (PC/SC) readers and for programming NFC tags.
+# Prebuilt for Windows and macOS - no compiler or drivers required.
 pyscard>=2.0
 requests>=2.31

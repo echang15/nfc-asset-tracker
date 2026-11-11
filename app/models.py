@@ -166,8 +166,33 @@ class ReaderEvent(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     uid = db.Column(db.String(64), nullable=False)
+    text = db.Column(db.String(255))  # NDEF text programmed on the tag, if any
     station = db.Column(db.String(80))
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+
+
+JOB_PENDING = "pending"    # waiting for a tag to be tapped
+JOB_WRITING = "writing"    # bridge is writing the tag
+JOB_DONE = "done"
+JOB_FAILED = "failed"
+JOB_CANCELLED = "cancelled"
+
+
+class TagWriteJob(db.Model):
+    """A request to program the next tapped NFC tag for an asset or user."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    kind = db.Column(db.String(10), nullable=False)  # asset | user
+    target_id = db.Column(db.Integer, nullable=False)
+    text = db.Column(db.String(255), nullable=False)
+    status = db.Column(db.String(12), nullable=False, default=JOB_PENDING, index=True)
+    uid = db.Column(db.String(64))
+    message = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    created_by = db.relationship("User")
 
 
 class Setting(db.Model):

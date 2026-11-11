@@ -44,6 +44,19 @@
   {% endwith %}
   {% block content %}{% endblock %}
 </main>
+{% if current_user.is_authenticated and current_user.is_admin %}
+<div class="modal" id="program-dialog" role="dialog" aria-modal="true" aria-live="polite">
+  <div class="modal-box">
+    <div class="icon" data-icon></div>
+    <h2 data-title></h2>
+    <div data-msg></div>
+    <p class="modal-actions">
+      <button class="btn" type="button" data-cancel>Cancel</button>
+      <button class="btn primary" type="button" data-close hidden>Close</button>
+    </p>
+  </div>
+</div>
+{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

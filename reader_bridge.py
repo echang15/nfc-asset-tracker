@@ -26,10 +26,13 @@ import argparse
 import os
 import re
 import sys
+import threading
 import time
 
-# APDU "Get Data" (PC/SC part 3) - returns the UID of the card on the antenna.
-GET_UID = [0xFF, 0xCA, 0x00, 0x00, 0x00]
+import nfc_tags
+from nfc_tags import format_uid  # noqa: F401  (re-exported for tests)
+
+VERSION = "2"
 
 # Reader names that indicate the contactless interface of a combo reader.
 CONTACTLESS_HINT = re.compile(r"picc|contactless|\bcl\b|nfc|rfid|\bpcd\b", re.I)
@@ -66,43 +69,80 @@ def choose_readers(names, wanted=""):
     return usable or names
 
 
-def format_uid(data):
-    return "".join(f"{b:02X}" for b in data)
-
-
 def _stamp():
     return time.strftime("%H:%M:%S")
 
 
 class Forwarder:
+    """Talks to the asset tracker server."""
+
     def __init__(self, url, key, station=""):
         import requests
 
         self.requests = requests
-        self.url = url.rstrip("/") + "/api/reader/push"
+        self.base = url.rstrip("/")
         self.key = key
         self.station = station
+        self.session = requests.Session()
+        self.session.headers["X-Api-Key"] = key
 
-    def send(self, uid):
-        for attempt in range(3):
+    def _post(self, path, payload, attempts=3):
+        for attempt in range(attempts):
             try:
-                r = self.requests.post(
-                    self.url, json={"uid": uid, "station": self.station},
-                    headers={"X-Api-Key": self.key}, timeout=5,
-                )
+                r = self.session.post(self.base + path, json=payload, timeout=5)
                 if r.status_code == 401:
-                    print(f"{_stamp()}  {uid}  -> rejected: wrong API key "
-                          "(copy it from Settings in the app)")
-                    return False
+                    print(f"{_stamp()}  rejected: wrong API key (copy it from Settings in the app)")
+                    return None
                 r.raise_for_status()
-                print(f"{_stamp()}  {uid}  -> sent")
-                return True
-            except self.requests.RequestException as exc:
-                if attempt == 2:
-                    print(f"{_stamp()}  {uid}  -> FAILED, is the app running? ({exc})")
+                return r.json()
+            except (self.requests.RequestException, ValueError) as exc:
+                if attempt == attempts - 1:
+                    print(f"{_stamp()}  could not reach the app at {self.base} ({exc})")
                 else:
-                    time.sleep(0.5)
-        return False
+                    time.sleep(0.4)
+        return None
+
+    def send(self, uid, text=None):
+        """Report a tap. Returns the server's answer (may contain a write job)."""
+        res = self._post("/api/reader/push",
+                         {"uid": uid, "text": text, "station": self.station,
+                          "version": VERSION})
+        if res is not None and not res.get("write"):
+            extra = f'  ("{text}")' if text else ""
+            print(f"{_stamp()}  {uid}{extra}  -> sent")
+        return res
+
+    def report(self, job_id, uid, ok, error=None):
+        return self._post(f"/api/reader/jobs/{job_id}/result",
+                          {"uid": uid, "ok": ok, "error": error}, attempts=5)
+
+    def heartbeat(self, readers):
+        return self._post("/api/reader/heartbeat",
+                          {"readers": readers, "version": VERSION}, attempts=1)
+
+
+def handle_tap(transmit, atr, forwarder):
+    """Process one tag on the reader: read it, report it and, if the app asked
+    for it, program it. ``transmit`` sends an APDU to the tag."""
+    uid = nfc_tags.read_uid(transmit)
+    text = nfc_tags.read_text(transmit, atr)
+    res = forwarder.send(uid, text)
+    write = (res or {}).get("write")
+    if not write:
+        return uid
+    if write.get("error"):
+        print(f"{_stamp()}  {uid}  -> cannot program: {write['error']}")
+        return uid
+    print(f'{_stamp()}  {uid}  -> programming "{write["text"]}" ...')
+    try:
+        nfc_tags.write_text(transmit, write["text"], atr)
+    except nfc_tags.TagError as exc:
+        print(f"{_stamp()}  {uid}  -> FAILED: {exc}")
+        forwarder.report(write["job_id"], uid, False, str(exc))
+        return uid
+    print(f"{_stamp()}  {uid}  -> programmed and verified")
+    forwarder.report(write["job_id"], uid, True)
+    return uid
 
 
 def make_observer(forwarder, allowed, verbose=False):
@@ -122,29 +162,35 @@ def make_observer(forwarder, allowed, verbose=False):
                     print(f"{_stamp()}  Contact card in '{reader}' ignored - "
                           "tap NFC tags on the contactless antenna instead.")
                     continue
-                uid = self.read_uid(card)
-                if uid:
-                    forwarder.send(uid)
-
-        @staticmethod
-        def read_uid(card):
-            try:
-                conn = card.createConnection()
-                conn.connect()
+                if verbose:
+                    print(f"{_stamp()}  {nfc_tags.describe_atr(card.atr)} on '{reader}'")
                 try:
-                    data, sw1, sw2 = conn.transmit(GET_UID)
+                    conn = card.createConnection()
+                    conn.connect()
+                except (CardConnectionException, NoCardException) as exc:
+                    print(f"{_stamp()}  ! tag moved away too fast, tap again ({exc})")
+                    continue
+                try:
+                    handle_tap(conn.transmit, card.atr, forwarder)
+                except nfc_tags.TagError as exc:
+                    print(f"{_stamp()}  ! {exc}")
+                except (CardConnectionException, NoCardException) as exc:
+                    print(f"{_stamp()}  ! tag moved away too fast, tap again ({exc})")
+                except Exception as exc:  # never let one bad tap kill the monitor
+                    print(f"{_stamp()}  ! unexpected error: {exc!r}")
                 finally:
-                    conn.disconnect()
-            except (CardConnectionException, NoCardException) as exc:
-                print(f"{_stamp()}  ! tag moved away too fast, tap again ({exc})")
-                return None
-            if (sw1, sw2) != (0x90, 0x00) or not data:
-                print(f"{_stamp()}  ! reader could not return a UID "
-                      f"(status {sw1:02X}{sw2:02X})")
-                return None
-            return format_uid(data)
+                    try:
+                        conn.disconnect()
+                    except Exception:
+                        pass
 
     return TagObserver()
+
+
+def _heartbeat_loop(forwarder, names):
+    while True:
+        forwarder.heartbeat(names)
+        time.sleep(5)
 
 
 def start(url, key, reader_filter="", station="", verbose=False, names=None):
@@ -172,7 +218,10 @@ def start(url, key, reader_filter="", station="", verbose=False, names=None):
     for n in names:
         print(f"{'Listening' if n in allowed else 'Ignoring '}: {n}")
 
-    observer = make_observer(Forwarder(url, key, station), allowed, verbose)
+    forwarder = Forwarder(url, key, station)
+    observer = make_observer(forwarder, allowed, verbose)
+    threading.Thread(target=_heartbeat_loop, args=(forwarder, sorted(allowed)),
+                     daemon=True, name="bridge-heartbeat").start()
     monitor = CardMonitor()
     monitor.addObserver(observer)
     print(f"Forwarding tag reads to {url}.")
@@ -182,7 +231,7 @@ def start(url, key, reader_filter="", station="", verbose=False, names=None):
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--url", default=os.environ.get("ASSET_TRACKER_URL", "http://127.0.0.1:5000"),
+    p.add_argument("--url", default=os.environ.get("ASSET_TRACKER_URL", "http://127.0.0.1:5050"),
                    help="asset tracker base URL (default %(default)s)")
     p.add_argument("--key", default=os.environ.get("ASSET_TRACKER_KEY"),
                    help="reader API key from Settings (or ASSET_TRACKER_KEY)")

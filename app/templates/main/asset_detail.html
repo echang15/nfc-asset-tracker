@@ -13,6 +13,7 @@
       {{ m.csrf() }}<button class="btn primary" type="submit">Check in</button>
     </form>
     {% endif %}
+    <button class="btn" type="button" data-program-tag="asset" data-id="{{ asset.id }}" data-label="{{ asset.asset_tag }}">Program NFC tag</button>
     <a class="btn" href="{{ url_for('admin.asset_edit', asset_id=asset.id) }}">Edit</a>
     {% if not asset.transactions %}
     <form method="post" action="{{ url_for('admin.asset_delete', asset_id=asset.id) }}" class="inline" onsubmit="return confirm('Delete this asset permanently?')">

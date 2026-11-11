@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% import "_macros.html" as m with context %}
 {% block title %}Settings{% endblock %}
+
 {% block content %}
 <h1>Settings</h1>
 {% include "admin/_settings_nav.html" %}
@@ -21,6 +22,7 @@
 </div>
 <div class="card">
   <h2>NFC reader setup</h2>
+  <p><span class="reader-status" id="reader-status"><span class="dot"></span><span data-text>Checking reader bridge…</span></span></p>
   <p><strong>Keyboard-emulation (HID) readers</strong> work out of the box: open the <a href="{{ url_for('scan.scan_page') }}">scan station</a> and tap a tag.</p>
   <p><strong>PC/SC smart-card readers</strong> (2-in-1 CAC + NFC readers, ACR122U, ACR1252U…) need the reader bridge. Start the app with it:</p>
   <pre class="mono small" style="background:#f4f6f9;padding:.75rem;border-radius:6px;overflow:auto">pip install -r requirements-reader.txt
@@ -36,7 +38,23 @@ python run.py --pcsc</pre>
   </form>
   <h3>Test a tag</h3>
   <p class="small muted">Click the field and tap a tag to see the UID the app receives.</p>
-  <div class="input-group"><input type="text" id="test_uid" class="mono" data-nfc-field placeholder="Tap a tag…"><button class="btn" data-scan-into="#test_uid">Read via bridge</button></div>
+  <div class="input-group"><input type="text" id="test_uid" class="mono" data-nfc-field placeholder="Tap a tag…"><button class="btn" data-scan-into="#test_uid" data-scan-text="#test_text">Read via bridge</button></div>
+  <p class="small" id="test_text"></p>
 </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(async function poll() {
+  const el = document.getElementById("reader-status");
+  try {
+    const r = await (await fetch("{{ url_for('tags.reader_status') }}")).json();
+    el.classList.toggle("on", r.connected);
+    el.querySelector("[data-text]").textContent = r.connected
+      ? "Reader bridge connected: " + (r.readers.join(", ") || "reader")
+      : "Reader bridge not running (only needed for smart-card/PC-SC readers and for programming tags)";
+  } catch (e) {}
+  setTimeout(poll, 5000);
+})();
+</script>
 {% endblock %}

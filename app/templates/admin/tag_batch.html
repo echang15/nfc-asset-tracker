@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Program tags{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Program NFC tags</h1>
+  <div class="actions">
+    <span class="reader-status {{ 'on' if bridge }}" id="reader-status"><span class="dot"></span><span>{{ 'Reader connected' if bridge else 'Reader bridge not detected' }}</span></span>
+    <a class="btn {{ 'primary' if which == 'untagged' }}" href="{{ url_for('tags.batch', which='untagged') }}">Untagged assets</a>
+    <a class="btn {{ 'primary' if which == 'all' }}" href="{{ url_for('tags.batch', which='all') }}">All assets</a>
+  </div>
+</div>
+<div class="card">
+  <p>Have a stack of blank NTAG213/215/216 stickers ready. Press <strong>Start</strong>, then for each asset listed,
+    place a new tag on the reader. The app writes the asset ID (e.g. <code>asset:A-00001</code>), checks it, links it to
+    the asset and moves to the next one. Stick each tag on its asset as you go.</p>
+  {% if not bridge %}
+  <div class="flash-msg warning">The reader bridge hasn't been seen in the last 20 seconds. Start the app with the start script
+    (or <code>python run.py --pcsc</code>) and make sure the reader is plugged in. Programming needs a PC/SC (smart-card) reader.</div>
+  {% endif %}
+  {% if assets %}
+  <div class="scan-zone" id="batch-zone" style="padding:1.5rem;margin:1rem 0">
+    <div class="icon" id="batch-icon">📶</div>
+    <h2 id="batch-title">{{ assets|length }} asset{{ 's' if assets|length != 1 }} to program</h2>
+    <p id="batch-msg" class="muted">Uncheck any you want to skip, then press Start.</p>
+    <p class="actions" style="justify-content:center">
+      <button class="btn primary" id="btn-start" type="button">Start</button>
+      <button class="btn" id="btn-retry" type="button" hidden>Retry</button>
+      <button class="btn" id="btn-skip" type="button" hidden>Skip</button>
+      <button class="btn danger" id="btn-stop" type="button" hidden>Stop</button>
+    </p>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th style="width:2rem"><input type="checkbox" id="check-all" checked></th><th>Asset</th><th>Category</th><th>Current tag</th><th>Result</th></tr></thead>
+    <tbody>
+    {% for a in assets %}
+    <tr data-id="{{ a.id }}" data-tag="{{ a.asset_tag }}" data-name="{{ a.name }}">
+      <td><input type="checkbox" class="pick" checked></td>
+      <td><a href="{{ url_for('main.asset_detail', asset_id=a.id) }}">{{ a.asset_tag }}</a> {{ a.name }}</td>
+      <td>{{ a.category.name if a.category else '' }}</td>
+      <td class="mono small">{{ a.nfc_uid or '—' }}</td>
+      <td class="small result"></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty">Every asset already has a tag. 🎉 Use "All assets" to re-program tags.</p>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const rows = [...document.querySelectorAll("tr[data-id]")];
+  if (!rows.length) return;
+  const $ = (id) => document.getElementById(id);
+  const title = $("batch-title"), msg = $("batch-msg"), icon = $("batch-icon"), zone = $("batch-zone");
+  const btn = { start: $("btn-start"), retry: $("btn-retry"), skip: $("btn-skip"), stop: $("btn-stop") };
+  let queue = [], current = null, job = null, stopped = false, done = 0;
+
+  $("check-all").addEventListener("change", (e) => rows.forEach((r) => r.querySelector(".pick").checked = e.target.checked));
+  const show = (names) => Object.entries(btn).forEach(([k, b]) => b.hidden = !names.includes(k));
+
+  async function next() {
+    if (stopped) return;
+    current = queue.shift();
+    if (!current) {
+      icon.textContent = "✅"; title.textContent = `Finished: ${done} tag${done === 1 ? "" : "s"} programmed`;
+      msg.textContent = "Reload the page to see the updated list."; show([]); zone.classList.remove("ready");
+      return;
+    }
+    run();
+  }
+
+  async function run() {
+    const r = current, label = `${r.dataset.tag} – ${r.dataset.name}`;
+    rows.forEach((x) => x.style.fontWeight = "");
+    r.style.fontWeight = "700";
+    r.scrollIntoView({ block: "nearest" });
+    icon.textContent = "📶"; zone.classList.add("ready");
+    title.textContent = `Place a blank tag for ${label}`;
+    msg.textContent = `${queue.length} more after this one.`;
+    show(["skip", "stop"]);
+    job = NFC.programTag("asset", r.dataset.id, (j) => {
+      if (j.status === "writing") msg.textContent = "Writing… keep the tag on the reader.";
+      if (j.status === "pending" && !j.bridge) msg.textContent = "Waiting for tag… (reader bridge not detected!)";
+    });
+    const res = await job;
+    if (stopped || res.status === "cancelled") return;
+    const cell = r.querySelector(".result");
+    if (res.status === "done") {
+      done++; NFC.beep(true);
+      cell.innerHTML = `<span class="badge available">Programmed</span>`;
+      r.querySelector(".mono").textContent = res.uid;
+      r.querySelector(".pick").checked = false;
+      icon.textContent = "✅"; title.textContent = `${r.dataset.tag} done – remove the tag`;
+      setTimeout(next, 1300);
+    } else {
+      NFC.beep(false);
+      cell.innerHTML = `<span class="badge lost">Failed</span> ${NFC.escapeHtml(res.message || "")}`;
+      icon.textContent = "⚠️"; title.textContent = `${r.dataset.tag}: ${res.message || "failed"}`;
+      msg.textContent = "Use another tag and press Retry, or Skip this asset.";
+      show(["retry", "skip", "stop"]);
+    }
+  }
+
+  btn.start.onclick = () => {
+    queue = rows.filter((r) => r.querySelector(".pick").checked);
+    stopped = false; done = 0;
+    if (!queue.length) { msg.textContent = "Nothing selected."; return; }
+    next();
+  };
+  btn.retry.onclick = () => run();
+  btn.skip.onclick = async () => {
+    if (job) await job.cancel();
+    current.querySelector(".result").innerHTML = `<span class="muted">Skipped</span>`;
+    next();
+  };
+  btn.stop.onclick = async () => {
+    stopped = true;
+    if (job) await job.cancel();
+    title.textContent = `Stopped – ${done} programmed`; msg.textContent = "Press Start to continue.";
+    icon.textContent = "📶"; show(["start"]); zone.classList.remove("ready");
+  };
+})();
+</script>
+{% endblock %}

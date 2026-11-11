@@ -7,10 +7,11 @@
 <div class="card">
   <form method="post" class="stacked" autocomplete="off">
     {{ m.csrf() }}
-    <label>NFC tag UID <span class="help">Click "Scan tag" and hold the asset's tag on the reader (or type the UID).</span></label>
+    <label>NFC tag UID <span class="help">Click "Scan tag" and hold an existing tag on the reader (or type the UID){% if asset.id %}, or "Program new tag" to write this asset's ID onto a blank tag{% else %}. To write the asset ID onto a blank tag, save first and then use "Program NFC tag"{% endif %}.</span></label>
     <div class="input-group">
-      <input type="text" name="nfc_uid" id="nfc_uid" class="mono" data-nfc-field value="{{ f.nfc_uid or asset.nfc_uid or '' }}" placeholder="e.g. 04A23B9C1D2E80" {% if not asset.id %}autofocus{% endif %}>
+      <input type="text" name="nfc_uid" id="nfc_uid" class="mono" data-nfc-field value="{{ f.nfc_uid or request.args.get('uid') or asset.nfc_uid or '' }}" placeholder="e.g. 04A23B9C1D2E80" {% if not asset.id %}autofocus{% endif %}>
       <button class="btn" data-scan-into="#nfc_uid">Scan tag</button>
+      {% if asset.id %}<button class="btn" type="button" data-program-tag="asset" data-id="{{ asset.id }}" data-label="{{ asset.asset_tag }}">Program new tag</button>{% endif %}
     </div>
     <div class="form-grid">
       <div><label>Asset tag *</label><input type="text" name="asset_tag" value="{{ f.asset_tag or asset.asset_tag or '' }}" required></div>

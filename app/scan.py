@@ -1,4 +1,3 @@
-import secrets
 from datetime import timedelta
 
 from flask import (
@@ -18,10 +17,10 @@ from .models import (
     db,
     get_bool_setting,
     get_int_setting,
-    get_setting,
     utcnow,
 )
 from .services import MODE_AUTO, SCAN_MODES, process_scan
+from .tags import check_api_key, claim_job_for_tap, note_bridge_contact
 from .utils import audit, normalize_uid
 
 bp = Blueprint("scan", __name__)
@@ -53,7 +52,8 @@ def api_scan():
     mode = data.get("mode", MODE_AUTO)
     if mode not in SCAN_MODES:
         mode = MODE_AUTO
-    result = process_scan(data.get("uid", ""), current_user, mode=mode)
+    result = process_scan(data.get("uid", ""), current_user, mode=mode,
+                          tag_text=data.get("text"))
     if result.result == "badge":
         badge_user = result.user
         if badge_user.id == current_user.id:
@@ -75,20 +75,24 @@ def api_scan():
 
 @bp.route("/api/reader/push", methods=["POST"])
 def api_reader_push():
-    """Endpoint used by reader_bridge.py. Authenticated by API key."""
-    key = request.headers.get("X-Api-Key", "")
-    expected = get_setting("reader_api_key") or ""
-    if not expected or not secrets.compare_digest(key, expected):
-        abort(401)
+    """Endpoint used by reader_bridge.py for every tag tap. Authenticated by
+    API key. If an admin is programming a tag, the answer tells the bridge
+    what to write and the tap is not treated as a scan."""
+    check_api_key()
     data = request.get_json(silent=True) or {}
+    note_bridge_contact(data)
     uid = normalize_uid(data.get("uid"))
     if not uid:
         abort(400)
-    db.session.add(ReaderEvent(uid=uid, station=(data.get("station") or "")[:80]))
+    write = claim_job_for_tap(uid)
+    if write is None:
+        text = (data.get("text") or "").strip()[:255] or None
+        db.session.add(ReaderEvent(uid=uid, text=text,
+                                   station=(data.get("station") or "")[:80]))
     # Keep the table small.
     ReaderEvent.query.filter(ReaderEvent.created_at < utcnow() - timedelta(hours=1)).delete()
     db.session.commit()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "write": write})
 
 
 @bp.route("/api/reader/poll")
@@ -101,7 +105,7 @@ def api_reader_poll():
         cursor = 0
     if cursor < 0:
         latest = db.session.query(db.func.max(ReaderEvent.id)).scalar() or 0
-        return jsonify({"cursor": latest, "uids": []})
+        return jsonify({"cursor": latest, "uids": [], "events": []})
     events = (
         ReaderEvent.query.filter(
             ReaderEvent.id > cursor,
@@ -112,7 +116,8 @@ def api_reader_poll():
         .all()
     )
     latest = max([e.id for e in events], default=cursor)
-    return jsonify({"cursor": latest, "uids": [e.uid for e in events]})
+    return jsonify({"cursor": latest, "uids": [e.uid for e in events],
+                    "events": [{"uid": e.uid, "text": e.text} for e in events]})
 
 
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}

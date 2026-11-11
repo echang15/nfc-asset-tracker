@@ -285,7 +285,7 @@ def _next_asset_tag():
 def asset_new():
     asset = Asset(status=STATUS_AVAILABLE, condition="good",
                   nfc_uid=normalize_uid(request.args.get("uid")) or None,
-                  asset_tag=_next_asset_tag())
+                  asset_tag=request.args.get("asset_tag") or _next_asset_tag())
     if request.method == "POST":
         errors = _asset_from_form(asset)
         if not errors:

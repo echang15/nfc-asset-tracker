@@ -7,6 +7,7 @@
   <div class="actions">
     <a class="btn primary" href="{{ url_for('admin.asset_new') }}">+ New asset</a>
     <a class="btn" href="{{ url_for('admin.asset_import') }}">Import CSV</a>
+    <a class="btn" href="{{ url_for('tags.batch') }}">Program tags</a>
     <a class="btn" href="{{ url_for('admin.categories') }}">Categories</a>
     <a class="btn" href="{{ url_for('admin.locations') }}">Locations</a>
   </div>
@@ -35,7 +36,7 @@
     <td>{{ a.location.name if a.location else '' }}</td>
     <td>{{ m.status_badge(a) }}</td>
     <td class="small">{% if a.holder %}{{ a.holder.full_name }}<br><span class="muted">{{ a.due_at|dt if a.due_at else 'no due date' }}</span>{% endif %}</td>
-    <td>{% if a.nfc_uid %}✅{% else %}<a class="small" href="{{ url_for('admin.asset_edit', asset_id=a.id) }}">Assign</a>{% endif %}</td>
+    <td>{% if a.nfc_uid %}✅{% else %}<button class="btn small" type="button" data-program-tag="asset" data-id="{{ a.id }}" data-label="{{ a.asset_tag }}">Program</button>{% endif %}</td>
   </tr>
   {% else %}<tr><td colspan="7" class="empty">No assets found.</td></tr>{% endfor %}
   </tbody>

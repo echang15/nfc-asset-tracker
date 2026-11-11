@@ -8,6 +8,9 @@ from app.models import ROLE_ADMIN, Asset, Category, User, db
 
 @pytest.fixture
 def app(tmp_path):
+    from app.tags import BRIDGE_STATUS
+
+    BRIDGE_STATUS.update(last_seen=None, readers=[], version=None)
     app = create_app({
         "TESTING": True,
         "SECRET_KEY": "test",

@@ -69,15 +69,17 @@ def create_app(test_config=None):
     from .main import bp as main_bp
     from .reports import bp as reports_bp
     from .scan import bp as scan_bp
+    from .tags import bp as tags_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(scan_bp)
+    app.register_blueprint(tags_bp)
     app.register_blueprint(admin_bp, url_prefix="/admin")
     app.register_blueprint(reports_bp, url_prefix="/reports")
 
     # The reader bridge authenticates with an API key instead of a session.
-    csrf_exempt = {"scan.api_reader_push"}
+    csrf_exempt = {"scan.api_reader_push", "tags.api_heartbeat", "tags.api_job_result"}
 
     @app.before_request
     def _security_checks():
@@ -102,6 +104,7 @@ def create_app(test_config=None):
 
     with app.app_context():
         db.create_all()
+        _upgrade_schema()
         _ensure_settings()
 
     _register_cli(app)
@@ -110,6 +113,27 @@ def create_app(test_config=None):
 
 def _has_users():
     return db.session.query(User.id).first() is not None
+
+
+def _upgrade_schema():
+    """Add columns introduced by newer versions to an existing database.
+
+    db.create_all() creates missing tables but never alters existing ones; new
+    nullable columns are added here so upgrading needs no manual migration.
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(db.engine)
+    with db.engine.begin() as conn:
+        for table in db.metadata.sorted_tables:
+            if not inspector.has_table(table.name):
+                continue
+            existing = {c["name"] for c in inspector.get_columns(table.name)}
+            for col in table.columns:
+                if col.name not in existing and col.nullable:
+                    ddl = col.type.compile(dialect=db.engine.dialect)
+                    conn.execute(text(
+                        f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl}'))
 
 
 def _ensure_settings():

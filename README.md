@@ -101,22 +101,46 @@ Tips:
   automatically.
 - Use **Settings → Test a tag** to see exactly what the app receives.
 
-### 2. PC/SC readers (ACR122U, ACR1252U, HID Omnikey, Identiv…)
+### 2. PC/SC (smart-card) readers
 
-These do not type anything. Run the small bridge script next to the app:
+This includes 2-in-1 **CAC / smart card + NFC** readers (e.g. Arsandyn and
+similar "Contact and Contactless IC/ID/PIV" readers), ACR122U, ACR1252U,
+HID Omnikey and Identiv. They do not type anything. A small bridge passes their
+tag reads to the app. The easiest way is to start it together with the app:
 
 ```bash
 pip install -r requirements-reader.txt     # pyscard + requests
-python reader_bridge.py --url http://127.0.0.1:5000 --key <reader API key>
+python run.py --pcsc
 ```
 
-The API key and the exact command are shown under **Settings → General**. The
-bridge reads each tag's UID and sends it to the app. The open Scan page (or the
-login page, for badges) picks it up within about a second.
+To check which reader the bridge will use (marked with `*`):
 
-Linux: install `pcscd` (`sudo apt install pcscd libpcsclite-dev swig`). On some
-distributions you also need to block the `pn533_usb` kernel module so it does
-not take over the ACR122U.
+```bash
+python reader_bridge.py --list
+```
+
+You can also run the bridge on its own:
+`python reader_bridge.py --key <reader API key>`. The key is shown under
+**Settings → General**.
+
+**2-in-1 contact + contactless readers** appear as two readers, one for the
+card slot and one for the NFC antenna. The bridge listens to the antenna and
+ignores cards pushed into the slot (CAC, bank cards). If `--list` picks the
+wrong one, choose it yourself with `--reader "<part of the name>"`.
+
+Per operating system:
+- **Windows / macOS**: no driver needed (the reader is a standard CCID device).
+  `pip install pyscard` installs a prebuilt package.
+- **Linux**: `sudo apt install pcscd pcsc-tools` and check the reader with
+  `pcsc_scan`. If pip has to build pyscard, also install `libpcsclite-dev swig`.
+  For ACR122U-type readers, blacklist the `pn533_usb` kernel module.
+
+**Which tags to buy:** 13.56 MHz ISO 14443A tags. NTAG213/215/216 stickers are
+cheap and read reliably. Use **on-metal / anti-metal** NFC stickers on laptops
+and metal tools, because ordinary stickers don't read on metal. Phones (Apple/Google
+Pay) and some bank cards show a random ID on each tap, so they can't be used as
+badges. 125 kHz proximity badges (older HID Prox / EM4100) can't be read by a
+13.56 MHz reader. The CAC chip in the contact slot is not used for sign-in.
 
 ## Typical workflow
 

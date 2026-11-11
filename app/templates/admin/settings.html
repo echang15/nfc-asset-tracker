@@ -22,9 +22,11 @@
 <div class="card">
   <h2>NFC reader setup</h2>
   <p><strong>Keyboard-emulation (HID) readers</strong> work out of the box: open the <a href="{{ url_for('scan.scan_page') }}">scan station</a> and tap a tag.</p>
-  <p><strong>PC/SC readers</strong> (e.g. ACR122U, ACR1252U) need the bridge script running on the laptop:</p>
+  <p><strong>PC/SC smart-card readers</strong> (2-in-1 CAC + NFC readers, ACR122U, ACR1252U…) need the reader bridge. Start the app with it:</p>
   <pre class="mono small" style="background:#f4f6f9;padding:.75rem;border-radius:6px;overflow:auto">pip install -r requirements-reader.txt
-python reader_bridge.py --url {{ request.host_url.rstrip('/') }} --key {{ s.reader_api_key }}</pre>
+python run.py --pcsc</pre>
+  <p class="small muted">Or run the bridge separately:</p>
+  <pre class="mono small" style="background:#f4f6f9;padding:.75rem;border-radius:6px;overflow:auto">python reader_bridge.py --url {{ request.host_url.rstrip('/') }} --key {{ s.reader_api_key }}</pre>
   <label class="small muted">Reader API key</label>
   <div class="input-group" style="margin:.3rem 0 1rem">
     <input type="text" class="mono" readonly value="{{ s.reader_api_key }}" onclick="this.select()">
